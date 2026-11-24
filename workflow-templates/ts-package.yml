@@ -19,6 +19,10 @@ jobs:
     uses: hostryhq/.github/.github/workflows/ts-ci.yml@main
     with:
       package-manager: pnpm # or npm, per client-app-standard
+      # Only if package.json uses link:../<name>. Public hostryhq repos, built before install.
+      # sibling-repos: |
+      #   ui-kit
+      #   client-core
 
   gitleaks:
     uses: hostryhq/.github/.github/workflows/gitleaks.yml@main

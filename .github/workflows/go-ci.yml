@@ -19,7 +19,9 @@ on:
         default: ./...
     secrets:
       private-modules-token:
-        description: Optional read-only token to fetch private hostryhq Go modules
+        description: >-
+          Optional. go-common and go-auth are public, so no token is needed;
+          only pass this if a private hostryhq module is added.
         required: false
 
 permissions:
