@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a change or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour and acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Contracts, tenancy or data affected
+      description: API changes, events, migrations (must be backward compatible for one release)
+  - type: markdown
+    attributes:
+      value: Cross-cutting changes need an ADR before implementation.

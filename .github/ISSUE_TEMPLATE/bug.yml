@@ -1,0 +1,36 @@
+name: Bug report
+description: Something is broken or behaves differently from the spec
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste secrets, tokens or real customer data. Use synthetic data.
+  - type: input
+    id: component
+    attributes:
+      label: Component and version
+      description: Service or app, and commit SHA or version
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected (link the spec or contract if any)
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: [Critical, High, Medium, Low]
+    validations:
+      required: true

@@ -1,0 +1,6 @@
+{
+  "name": "Hostry api-specs CI",
+  "description": "Calls the shared openapi-ci and gitleaks workflows; ends in the required check 'ci / required'.",
+  "iconName": "octicon workflow",
+  "categories": ["OpenAPI"]
+}
