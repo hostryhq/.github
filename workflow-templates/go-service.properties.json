@@ -1,0 +1,7 @@
+{
+  "name": "Hostry Go service or library CI",
+  "description": "Calls the shared go-ci and gitleaks workflows; ends in the required check 'ci / required'.",
+  "iconName": "octicon workflow",
+  "categories": ["Go"],
+  "filePatterns": ["^go\\.mod$"]
+}

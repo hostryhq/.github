@@ -1,0 +1,64 @@
+# Reusable Go CI: vet, golangci-lint, race tests, build.
+# One job on purpose: fewer runner start-ups on the Free plan minutes budget.
+name: go-ci
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory containing go.mod
+        type: string
+        default: .
+      golangci-lint-version:
+        description: golangci-lint version (pinned)
+        type: string
+        default: v2.15.0
+      build-target:
+        description: Package pattern passed to go build
+        type: string
+        default: ./...
+    secrets:
+      private-modules-token:
+        description: Optional read-only token to fetch private hostryhq Go modules
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      GOPRIVATE: github.com/hostryhq/*
+      PRIVATE_MODULES_TOKEN: ${{ secrets.private-modules-token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: ${{ inputs.working-directory }}/go.mod
+          cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+      - name: Allow private hostryhq modules (only when token supplied)
+        if: env.PRIVATE_MODULES_TOKEN != ''
+        run: |
+          git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/hostryhq/".insteadOf "https://github.com/hostryhq/"
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: go vet
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+          working-directory: ${{ inputs.working-directory }}
+      - name: go test -race
+        run: go test -race -count=1 ./...
+      - name: go build
+        run: go build ${{ inputs.build-target }}

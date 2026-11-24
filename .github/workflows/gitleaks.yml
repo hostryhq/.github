@@ -1,0 +1,41 @@
+# Reusable secret scan. Uses the pinned gitleaks CLI with a checksum check
+# (gitleaks-action needs a paid licence for organisations).
+name: gitleaks
+
+on:
+  workflow_call:
+    inputs:
+      gitleaks-version:
+        type: string
+        default: "8.30.1"
+      gitleaks-sha256:
+        description: sha256 of gitleaks_<version>_linux_x64.tar.gz
+        type: string
+        default: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks (checksum verified)
+        env:
+          V: ${{ inputs.gitleaks-version }}
+          SHA: ${{ inputs.gitleaks-sha256 }}
+        run: |
+          f="gitleaks_${V}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$f" "https://github.com/gitleaks/gitleaks/releases/download/v${V}/${f}"
+          echo "${SHA}  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan history (secret values redacted in output)
+        run: |
+          cfg=()
+          if [ -f .gitleaks.toml ]; then cfg=(--config .gitleaks.toml); fi
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose "${cfg[@]}" .

@@ -1,0 +1,7 @@
+{
+  "name": "Hostry TypeScript package or app CI",
+  "description": "Calls the shared ts-ci and gitleaks workflows; ends in the required check 'ci / required'.",
+  "iconName": "octicon workflow",
+  "categories": ["TypeScript"],
+  "filePatterns": ["^package\\.json$"]
+}

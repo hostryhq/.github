@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  pull_request:
+    paths-ignore: ["**.md"]
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  openapi:
+    uses: hostryhq/.github/.github/workflows/openapi-ci.yml@main
+
+  gitleaks:
+    uses: hostryhq/.github/.github/workflows/gitleaks.yml@main
+
+  # Single status check for the ruleset: "ci / required".
+  required:
+    if: always()
+    needs: [openapi, gitleaks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: All required jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done

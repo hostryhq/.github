@@ -1,0 +1,85 @@
+# Reusable OpenAPI CI (api-contract-standard): Spectral lint + oasdiff breaking-change check.
+# Breaking changes fail unless the PR carries the approval label (and is versioned).
+name: openapi-ci
+
+on:
+  workflow_call:
+    inputs:
+      spec-dir:
+        description: Directory holding one OpenAPI document per service
+        type: string
+        default: openapi
+      spectral-version:
+        type: string
+        default: 6.15.0
+      oasdiff-version:
+        type: string
+        default: v1.39.0
+      breaking-label:
+        description: PR label that allows a breaking change
+        type: string
+        default: breaking-change-approved
+
+permissions:
+  contents: read
+
+jobs:
+  openapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          go-version: stable
+          cache: false
+      - name: Spectral lint
+        env:
+          V: ${{ inputs.spectral-version }}
+          DIR: ${{ inputs.spec-dir }}
+        run: |
+          shopt -s nullglob
+          files=("$DIR"/*.yaml "$DIR"/*.yml)
+          if [ ${#files[@]} -eq 0 ]; then echo "No specs in $DIR; nothing to lint"; exit 0; fi
+          if [ -f .spectral.yaml ]; then
+            rs="$PWD/.spectral.yaml"
+          else
+            rs="$RUNNER_TEMP/spectral.yaml"
+            printf 'extends: ["spectral:oas"]\n' > "$rs"
+          fi
+          npx --yes "@stoplight/spectral-cli@${V}" lint --fail-severity=warn --ruleset "$rs" "${files[@]}"
+      - name: Install oasdiff
+        if: github.event_name == 'pull_request'
+        env:
+          V: ${{ inputs.oasdiff-version }}
+        run: go install "github.com/oasdiff/oasdiff@${V}"
+      - name: Breaking-change check against base branch
+        if: github.event_name == 'pull_request'
+        env:
+          DIR: ${{ inputs.spec-dir }}
+          BASE_REF: ${{ github.base_ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          ALLOW: ${{ inputs.breaking-label }}
+        run: |
+          shopt -s nullglob
+          status=0
+          for f in "$DIR"/*.yaml "$DIR"/*.yml; do
+            if ! git cat-file -e "origin/${BASE_REF}:${f}" 2>/dev/null; then echo "new spec $f; no baseline"; continue; fi
+            git show "origin/${BASE_REF}:${f}" > "$RUNNER_TEMP/base.yaml"
+            echo "== $f"
+            "$(go env GOPATH)/bin/oasdiff" breaking "$RUNNER_TEMP/base.yaml" "$f" --fail-on ERR || status=1
+          done
+          if [ $status -ne 0 ]; then
+            case ",${LABELS}," in
+              *",${ALLOW},"*) echo "Breaking changes allowed by label '${ALLOW}'"; status=0;;
+              *) echo "Breaking change without label '${ALLOW}'. Add a new /vN version or get approval." >&2;;
+            esac
+          fi
+          exit $status
