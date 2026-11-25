@@ -19,6 +19,30 @@ on:
         description: PR label that allows a breaking change
         type: string
         default: breaking-change-approved
+      setup-command:
+        description: Optional command run first (for example "make tools" to install oasdiff and codegen)
+        type: string
+        default: ""
+      lint-command:
+        description: >-
+          Optional. Replaces the built-in Spectral step (for example "make lint", which also runs the
+          repo's own validators). The command must exit non-zero on findings.
+        type: string
+        default: ""
+      breaking-command:
+        description: >-
+          Optional. Replaces the built-in oasdiff loop (for example "make breaking BASE=origin/$BASE_REF";
+          BASE_REF is exported). The same label override applies.
+        type: string
+        default: ""
+      test-command:
+        description: Optional command run last (for example "go test ./..." for a contract harness)
+        type: string
+        default: ""
+      go-version-file:
+        description: go.mod to take the Go version from; empty means latest stable (PRs only)
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -36,11 +60,23 @@ jobs:
         with:
           node-version: "22"
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.go-version-file != ''
         with:
-          go-version: stable
-          cache: false
+          go-version: ${{ inputs.go-version-file == '' && 'stable' || '' }}
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: ${{ inputs.go-version-file != '' }}
+      - name: Setup command
+        if: inputs.setup-command != ''
+        env:
+          CMD: ${{ inputs.setup-command }}
+        run: bash -euo pipefail -c "$CMD"
+      - name: Lint (repo command)
+        if: inputs.lint-command != ''
+        env:
+          CMD: ${{ inputs.lint-command }}
+        run: bash -euo pipefail -c "$CMD"
       - name: Spectral lint
+        if: inputs.lint-command == ''
         env:
           V: ${{ inputs.spectral-version }}
           DIR: ${{ inputs.spec-dir }}
@@ -56,7 +92,7 @@ jobs:
           fi
           npx --yes "@stoplight/spectral-cli@${V}" lint --fail-severity=warn --ruleset "$rs" "${files[@]}"
       - name: Install oasdiff
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && inputs.breaking-command == ''
         env:
           V: ${{ inputs.oasdiff-version }}
         run: go install "github.com/oasdiff/oasdiff@${V}"
@@ -67,15 +103,21 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           ALLOW: ${{ inputs.breaking-label }}
+          CMD: ${{ inputs.breaking-command }}
         run: |
           shopt -s nullglob
           status=0
-          for f in "$DIR"/*.yaml "$DIR"/*.yml; do
-            if ! git cat-file -e "origin/${BASE_REF}:${f}" 2>/dev/null; then echo "new spec $f; no baseline"; continue; fi
-            git show "origin/${BASE_REF}:${f}" > "$RUNNER_TEMP/base.yaml"
-            echo "== $f"
-            "$(go env GOPATH)/bin/oasdiff" breaking "$RUNNER_TEMP/base.yaml" "$f" --fail-on ERR || status=1
-          done
+          export BASE_REF
+          if [ -n "$CMD" ]; then
+            bash -euo pipefail -c "$CMD" || status=1
+          else
+            for f in "$DIR"/*.yaml "$DIR"/*.yml; do
+              if ! git cat-file -e "origin/${BASE_REF}:${f}" 2>/dev/null; then echo "new spec $f; no baseline"; continue; fi
+              git show "origin/${BASE_REF}:${f}" > "$RUNNER_TEMP/base.yaml"
+              echo "== $f"
+              "$(go env GOPATH)/bin/oasdiff" breaking "$RUNNER_TEMP/base.yaml" "$f" --fail-on ERR || status=1
+            done
+          fi
           if [ $status -ne 0 ]; then
             case ",${LABELS}," in
               *",${ALLOW},"*) echo "Breaking changes allowed by label '${ALLOW}'"; status=0;;
@@ -83,3 +125,8 @@ jobs:
             esac
           fi
           exit $status
+      - name: Test command (contract harness)
+        if: inputs.test-command != ''
+        env:
+          CMD: ${{ inputs.test-command }}
+        run: bash -euo pipefail -c "$CMD"
